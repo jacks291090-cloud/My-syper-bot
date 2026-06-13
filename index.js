@@ -101,3 +101,15 @@ app.get('/', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Професійний сервер запущено`));
 bot.launch();
+bot.command('price', async (ctx) => {
+    try {
+        const res = await axios.get('https://binance.com["BTCUSDT","ETHUSDT","SOLUSDT"]');
+        let msg = `💰 <b>Поточні ціни на біржі:</b>\n\n`;
+        res.data.forEach(coin => {
+            msg += `• <b>${coin.symbol.replace('USDT', '')}:</b> $${parseFloat(coin.price).toFixed(2)}\n`;
+        });
+        ctx.replyWithHTML(msg);
+    } catch (e) {
+        ctx.reply('Не вдалося завантажити ціни.');
+    }
+});
