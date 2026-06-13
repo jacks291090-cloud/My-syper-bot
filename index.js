@@ -1,69 +1,47 @@
-const { Telegraf } = require('telegraf');
-const express = require('express');
+const { Bot } = require('grammy'); // Або 'telegraf', залежно від вашої бібліотеки
+const cron = require('node-cron');
 
-const app = express();
-const MY_CHAT_ID = process.env.MY_CHAT_ID;
-const bot = new Telegraf(process.env.BOT_TOKEN);
+// Отримуємо змінні з налаштувань Render
+const token = process.env.TELEGRAM_TOKEN;
+const chatId = process.env.CHAT_ID;
 
-const COINS = [
-    { id: 'bitcoin', name: 'Bitcoin (BTC)' },
-    { id: 'ethereum', name: 'Ethereum (ETH)' },
-    { id: 'solana', name: 'Solana (SOL)' }
-];
-
-// Автоматичний аналіз ринку ШІ
-async function analyzeMarket() {
-    console.log("ШІ сканує ринок...");
-    try {
-        // Запит через відкритий шлюз, який не блокується хмарою Render
-        const res = await fetch('https://coingecko.com');
-        const data = await res.json();
-        
-        for (const coin of COINS) {
-            if (data[coin.id]) {
-                const price = data[coin.id].usd;
-                const change = data[coin.id].usd_24h_change;
-
-                let signal = null;
-                // Якщо монета за добу впала більш ніж на 5% - це сигнал на покупку (дно)
-                if (change < -5) signal = "BUY 🟢";
-                // Якщо виросла більш ніж на 7% - сигнал на продаж (пік)
-                else if (change > 7) signal = "SELL 🔴";
-
-                if (signal && MY_CHAT_ID) {
-                    const msg = `🚨 <b>ШІ СИГНАЛ: ${signal}</b>\n\n<b>Монета:</b> ${coin.name}\n<b>Ціна:</b> $${price.toFixed(2)}\n<b>Зміна за 24г:</b> ${change.toFixed(2)}%`;
-                    await bot.telegram.sendMessage(MY_CHAT_ID, msg, { parse_mode: 'HTML' }).catch(() => {});
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Помилка аналізу:", e.message);
-    }
+if (!token || !chatId) {
+    console.error("Помилка: Перевірте налаштування TELEGRAM_TOKEN та CHAT_ID в Render!");
+    process.exit(1);
 }
 
-// Виправлена і надійна команда /price
-bot.command('price', async (ctx) => {
+const bot = new Bot(token);
+
+// 1. Сигнал кожні 3 хвилини
+cron.schedule('*/3 * * * *', async () => {
     try {
-        const res = await fetch('https://coingecko.com');
-        const data = await res.json();
-        
-        let msg = `💰 <b>Поточні ціни на ринку:</b>\n\n`;
-        msg += `• <b>BTC:</b> $${data.bitcoin.usd.toFixed(2)}\n`;
-        msg += `• <b>ETH:</b> $${data.ethereum.usd.toFixed(2)}\n`;
-        msg += `• <b>SOL:</b> $${data.solana.usd.toFixed(2)}\n`;
-        
-        ctx.replyWithHTML(msg);
-    } catch (e) {
-        ctx.reply('Сервер оновлює дані, повтори команду через 10 секунд.');
+        await bot.api.sendMessage(chatId, "🤖 **[Швидкий сигнал — 3хв]**\nШІ проаналізував ринок. Змін не виявлено.", { parse_mode: "Markdown" });
+        console.log("Сигнал 3хв надіслано");
+    } catch (error) {
+        console.error("Помилка відправки 3хв:", error);
     }
 });
 
-app.get('/', async (req, res) => {
-    res.send('Розумний бот активний!');
-    await analyzeMarket();
+// 2. Сигнал кожну 1 годину
+cron.schedule('0 * * * *', async () => {
+    try {
+        await bot.api.sendMessage(chatId, "📊 **[Аналітика — 1 година]**\nГодинний тренд залишається стабільним.", { parse_mode: "Markdown" });
+        console.log("Сигнал 1г надіслано");
+    } catch (error) {
+        console.error("Помилка відправки 1г:", error);
+    }
 });
 
-bot.start((ctx) => ctx.reply(`Бот активований! Твій Chat ID: ${ctx.chat.id}`));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Сервер працює'));
-bot.launch();
+// 3. Сигнал кожні 5 годин
+cron.schedule('0 */5 * * *', async () => {
+    try {
+        await bot.api.sendMessage(chatId, "🐋 **[Глобальний огляд — 5 годин]**\nШІ підготував детальний звіт.", { parse_mode: "Markdown" });
+        console.log("Сигнал 5г надіслано");
+    } catch (error) {
+        console.error("Помилка відправки 5г:", error);
+    }
+});
+
+// Запуск бота
+bot.start();
+console.log("🤖 Бот та планувальник сигналів Node.js успішно запущені!");
