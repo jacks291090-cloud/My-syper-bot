@@ -23,16 +23,19 @@ function calculateRSI(prices) {
     return 100 - (100 / (1 + rs));
 }
 
-// ГОЛОВНИЙ ШІ-АНАЛІЗАТОР
+// ГОЛОВНИЙ ШІ-АНАЛІЗАТОР (Працює через Bybit API)
 async function analyzeMarket() {
     console.log("[ШІ] Аналіз ринку...");
     for (const coin of CRYPTO_LIST) {
         try {
-            // Надійний запит через вбудований fetch
-            const res = await fetch(`https://binance.com{coin.symbol}&interval=1h&limit=30`);
-            const candles = await res.json();
+            // Запит свічок з Bybit (вони не блокують Render)
+            const res = await fetch(`https://bybit.com{coin.symbol}&interval=60&limit=30`);
+            const json = await res.json();
             
-            const closePrices = candles.map(c => parseFloat(c[4])); // Індекс 4 - ціна закриття
+            if (!json.result || !json.result.list) continue;
+            
+            // Bybit віддає свічки від нових до старих, тому беремо індекс 4 (close) і робимо reverse
+            const closePrices = json.result.list.map(c => parseFloat(c[4])).reverse();
             const currentPrice = closePrices[closePrices.length - 1];
             const rsi = calculateRSI(closePrices.slice(-14));
 
@@ -50,20 +53,24 @@ async function analyzeMarket() {
     }
 }
 
-// Команда /price (ТЕПЕР ПРАЦЮЄ НА 100%)
+// Команда /price (ТЕПЕР НАЙНАДІЙНІША ЧЕРЕЗ BYBIT)
 bot.command('price', async (ctx) => {
     try {
-        let msg = `💰 <b>Поточні ціни на біржі:</b>\n\n`;
+        let msg = `💰 <b>Поточні ціни на біржі (Bybit):</b>\n\n`;
         
         for (const coin of CRYPTO_LIST) {
-            const res = await fetch(`https://binance.com{coin.symbol}`);
-            const data = await res.json();
-            msg += `• <b>${coin.name.split(' ')[0]}:</b> $${parseFloat(data.price).toFixed(2)}\n`;
+            const res = await fetch(`https://bybit.com{coin.symbol}`);
+            const json = await res.json();
+            
+            if (json.result && json.result.list && json.result.list[0]) {
+                const price = parseFloat(json.result.list[0].lastPrice).toFixed(2);
+                msg += `• <b>${coin.name}:</b> $${price}\n`;
+            }
         }
         
         ctx.replyWithHTML(msg);
     } catch (e) {
-        ctx.reply('Помилка зв\'язку з біржею Binance.');
+        ctx.reply('Помилка зв\'язку з торговою платформою.');
     }
 });
 
