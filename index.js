@@ -2,44 +2,68 @@ const { Telegraf } = require('telegraf');
 const express = require('express');
 
 const app = express();
-app.use(express.json()); // Дозволяє боту читати дані від TradingView
-
 const MY_CHAT_ID = process.env.MY_CHAT_ID;
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// 1. Ця адреса чекає на автоматичні сигнали від твоїх графіків
-app.post('/webhook-signal', (req, res) => {
-    const data = req.body;
-    console.log("Отримано сигнал з TradingView:", data);
+const COINS = [
+    { id: 'bitcoin', name: 'Bitcoin (BTC)' },
+    { id: 'ethereum', name: 'Ethereum (ETH)' },
+    { id: 'solana', name: 'Solana (SOL)' }
+];
 
-    let message = `🚨 <b>СИГНАЛ З TRADINGVIEW</b> 🚨\n\n`;
+// Автоматичний аналіз ринку ШІ
+async function analyzeMarket() {
+    console.log("ШІ сканує ринок...");
+    try {
+        // Запит через відкритий шлюз, який не блокується хмарою Render
+        const res = await fetch('https://coingecko.com');
+        const data = await res.json();
+        
+        for (const coin of COINS) {
+            if (data[coin.id]) {
+                const price = data[coin.id].usd;
+                const change = data[coin.id].usd_24h_change;
 
-    // Форматування повідомлення: якщо ти надіслав готовий текст
-    if (data.text) {
-        message += `${data.text}`;
-    } else {
-        // Якщо надіслав структуровані дані
-        message += `<b>Актив:</b> ${data.ticker || 'Крипта'}\n`;
-        message += `<b>Дія:</b> ${data.action === 'buy' ? '🟢 BUY (Лонг)' : '🔴 SELL (Шорт)'}\n`;
-        message += `<b>Ціна:</b> $${data.price || 'за ринком'}`;
+                let signal = null;
+                // Якщо монета за добу впала більш ніж на 5% - це сигнал на покупку (дно)
+                if (change < -5) signal = "BUY 🟢";
+                // Якщо виросла більш ніж на 7% - сигнал на продаж (пік)
+                else if (change > 7) signal = "SELL 🔴";
+
+                if (signal && MY_CHAT_ID) {
+                    const msg = `🚨 <b>ШІ СИГНАЛ: ${signal}</b>\n\n<b>Монета:</b> ${coin.name}\n<b>Ціна:</b> $${price.toFixed(2)}\n<b>Зміна за 24г:</b> ${change.toFixed(2)}%`;
+                    await bot.telegram.sendMessage(MY_CHAT_ID, msg, { parse_mode: 'HTML' }).catch(() => {});
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Помилка аналізу:", e.message);
     }
+}
 
-    // Надсилаємо сигнал тобі в особисті повідомлення Telegram
-    if (MY_CHAT_ID) {
-        bot.telegram.sendMessage(MY_CHAT_ID, message, { parse_mode: 'HTML' })
-            .catch(err => console.error("Помилка відправки:", err.message));
+// Виправлена і надійна команда /price
+bot.command('price', async (ctx) => {
+    try {
+        const res = await fetch('https://coingecko.com');
+        const data = await res.json();
+        
+        let msg = `💰 <b>Поточні ціни на ринку:</b>\n\n`;
+        msg += `• <b>BTC:</b> $${data.bitcoin.usd.toFixed(2)}\n`;
+        msg += `• <b>ETH:</b> $${data.ethereum.usd.toFixed(2)}\n`;
+        msg += `• <b>SOL:</b> $${data.solana.usd.toFixed(2)}\n`;
+        
+        ctx.replyWithHTML(msg);
+    } catch (e) {
+        ctx.reply('Сервер оновлює дані, повтори команду через 10 секунд.');
     }
-
-    return res.status(200).send('OK');
 });
 
-// Головна сторінка для перевірки сервісу
-app.get('/', (req, res) => {
-    res.send('Приймач сигналів з TradingView повністю активний!');
+app.get('/', async (req, res) => {
+    res.send('Розумний бот активний!');
+    await analyzeMarket();
 });
 
 bot.start((ctx) => ctx.reply(`Бот активований! Твій Chat ID: ${ctx.chat.id}`));
-bot.launch();
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Сервер запущено`));
+app.listen(PORT, () => console.log('Сервер працює'));
+bot.launch();
