@@ -44,8 +44,8 @@ async function analyzeMarket() {
             const response = await axios.get(`https://binance.com{coin.symbol}&interval=1h&limit=60`);
             const candles = response.data;
 
-            const closePrices = candles.map(c => parseFloat(c[4])); // Ціни закриття
-            const volumes = candles.map(c => parseFloat(c[5]));     // Об'єми торгів
+            const closePrices = candles.map(c => parseFloat(c[4])); // Ціни закриття (індекс 4)
+            const volumes = candles.map(c => parseFloat(c[5]));     // Об'єми торгів (індекс 5)
 
             const currentPrice = closePrices[closePrices.length - 1];
             const currentVolume = volumes[volumes.length - 1];
@@ -61,20 +61,20 @@ async function analyzeMarket() {
             let signal = null;
             let reason = "";
 
-            // СУВОРИЙ АЛГОРИТМ УГОДИ:
-            // BUY: Ціна вище EMA20 і EMA50 (аптренд) + Об'єм вище середнього на 20% + RSI в нормі (не перегрітий)
+            // СУВОРИЙ АЛГОРИТМ УГОДИ
             if (currentPrice > ema20 && ema20 > ema50 && currentVolume > avgVolume * 1.2 && rsi > 45 && rsi < 65) {
                 signal = "BUY";
-                reason = `📈 <b>Підтверджено вихідний тренд!</b>\n` +
+                reason = `📈 <b>Підтверджено висхідний тренд!</b>\n` +
                          `• Ціна пробила ковзні середні вгору.\n` +
-                         `• Об'єми торгів виросли на ${( (currentVolume/avgVolume - 1) * 100 ).toFixed(0)}% (Зайшли гроші).\n` +
+                         `• Об'єми торгів виросли на ${((currentVolume/avgVolume - 1) * 100).toFixed(0)}% (Зайшли гроші).\n` +
                          `• RSI рівний ${rsi.toFixed(0)} (Є запас для росту).`;
             } 
-            // SELL: Ціна падає нижче EMA20 і EMA50 + Об'єми на продаж ростуть + RSI падає
             else if (currentPrice < ema20 && ema20 < ema50 && currentVolume > avgVolume * 1.2 && rsi < 50) {
                 signal = "SELL";
                 reason = `📉 <b>Підтверджено спадний тренд (Шорт)!</b>\n` +
-                         `• Ціна провалилася під лінію тренду EMA50.\n...`;
+                         `• Ціна провалилася під лінію тренду EMA50.\n` +
+                         `• Об'єми торгів виросли на ${((currentVolume/avgVolume - 1) * 100).toFixed(0)}%.\n` +
+                         `• RSI рівний ${rsi.toFixed(0)}.`;
             }
 
             if (signal && MY_CHAT_ID) {
@@ -83,7 +83,8 @@ async function analyzeMarket() {
                                     `<b>Ціна входу:</b> $${currentPrice}\n\n` +
                                     `📊 <b>Обґрунтування ШІ:</b>\n${reason}`;
                 
-                await bot.telegram.sendMessage(MY_CHAT_ID, textMessage, { parse_mode: 'HTML' });
+                await bot.telegram.sendMessage(MY_CHAT_ID, textMessage, { parse_mode: 'HTML' })
+                    .catch(err => console.error("Помилка надсилання в ТГ:", err.message));
             }
 
         } catch (error) {
@@ -98,9 +99,7 @@ app.get('/', async (req, res) => {
     await analyzeMarket();
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Професійний сервер запущено`));
-bot.launch();
+// Кнопка миттєвої перевірки цін прямо в чаті
 bot.command('price', async (ctx) => {
     try {
         const res = await axios.get('https://binance.com["BTCUSDT","ETHUSDT","SOLUSDT"]');
@@ -113,3 +112,9 @@ bot.command('price', async (ctx) => {
         ctx.reply('Не вдалося завантажити ціни.');
     }
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Професійний сервер запущено`));
+
+bot.start((ctx) => ctx.reply(`Бот активований. Твій Chat ID: ${ctx.chat.id}`));
+bot.launch();
