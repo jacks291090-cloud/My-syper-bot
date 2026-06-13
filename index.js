@@ -6,19 +6,26 @@ const app = express();
 const MY_CHAT_ID = process.env.MY_CHAT_ID;
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Список монет для автоматичного аналізу ШІ
 const CRYPTO_LIST = [
     { symbol: 'BTCUSDT', name: 'Bitcoin (BTC)' },
     { symbol: 'ETHUSDT', name: 'Ethereum (ETH)' },
     { symbol: 'SOLUSDT', name: 'Solana (SOL)' }
 ];
 
-// Функція розрахунку індексу ринку (RSI)
-function calculateRSI(candles) {
-    const prices = candles.map(candle => parseFloat(candle[4])); // Зріз за ціною закриття
+// 1. Функція розрахунку ковзної середньої (EMA)
+function calculateEMA(prices, period) {
+    const k = 2 / (period + 1);
+    let ema = prices[0];
+    for (let i = 1; i < prices.length; i++) {
+        ema = prices[i] * k + ema * (1 - k);
+    }
+    return ema;
+}
+
+// 2. Розрахунок стандартного RSI
+function calculateRSI(prices) {
     let upMove = 0;
     let downMove = 0;
-    
     for (let i = 1; i < prices.length; i++) {
         if (prices[i] > prices[i-1]) upMove += (prices[i] - prices[i-1]);
         else downMove += (prices[i-1] - prices[i]);
@@ -27,71 +34,70 @@ function calculateRSI(candles) {
     return 100 - (100 / (1 + rs));
 }
 
-// ГОЛОВНИЙ АЛГОРИТМ: Почерговий аналіз BTC, ETH, SOL
+// ГОЛОВНИЙ ШІ-АНАЛІЗАТОР ТРЕНДУ ТА ОБ'ЄМІВ
 async function analyzeMarket() {
-    console.log("[ШІ] Початок сканування криптовалютного ринку...");
+    console.log("[ШІ] Початок комплексного аналізу ринку (Тренд + Об'єми)...");
     
     for (const coin of CRYPTO_LIST) {
         try {
-            // 1. Аналіз 1-годинного таймфрейму (1h)
-            const res1h = await axios.get(`https://binance.com{coin.symbol}&interval=1h&limit=20`);
-            const rsi1h = calculateRSI(res1h.data);
+            // Завантажуємо 1-годинні свічки з Binance (ліміт 60 свічок для точної EMA)
+            const response = await axios.get(`https://binance.com{coin.symbol}&interval=1h&limit=60`);
+            const candles = response.data;
 
-            // 2. Аналіз 5-годинного таймфрейму (5h)
-            const res5hRaw = await axios.get(`https://binance.com{coin.symbol}&interval=1h&limit=100`);
-            const res5h = res5hRaw.data.filter((_, index) => index % 5 === 0);
-            const rsi5h = calculateRSI(res5h);
+            const closePrices = candles.map(c => parseFloat(c[4])); // Ціни закриття
+            const volumes = candles.map(c => parseFloat(c[5]));     // Об'єми торгів
 
-            // Поточна ціна монети
-            const currentPrice = parseFloat(res1h.data[res1h.data.length - 1][4]);
+            const currentPrice = closePrices[closePrices.length - 1];
+            const currentVolume = volumes[volumes.length - 1];
+            
+            // Рахуємо середній об'єм за останні 10 годин для порівняння
+            const avgVolume = volumes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+
+            // Розрахунок індикаторів тренду
+            const ema20 = calculateEMA(closePrices, 20);
+            const ema50 = calculateEMA(closePrices, 50);
+            const rsi = calculateRSI(closePrices.slice(-14)); // RSI за 14 періодів
 
             let signal = null;
-            let message = "";
+            let reason = "";
 
-            // ЛОГІКА СИГНАЛУ (Збіг 1h та 5h)
-            if (rsi1h < 30 && rsi5h < 35) { 
+            // СУВОРИЙ АЛГОРИТМ УГОДИ:
+            // BUY: Ціна вище EMA20 і EMA50 (аптренд) + Об'єм вище середнього на 20% + RSI в нормі (не перегрітий)
+            if (currentPrice > ema20 && ema20 > ema50 && currentVolume > avgVolume * 1.2 && rsi > 45 && rsi < 65) {
                 signal = "BUY";
-                message = `🟢 <b>РОЗУМНИЙ СИГНАЛ: BUY (Лонг)</b> 🟢\n\n` +
-                          `<b>Монета:</b> ${coin.name}\n` +
-                          `<b>Поточна ціна:</b> $${currentPrice}\n\n` +
-                          `📊 <b>Аналіз таймфреймів:</b>\n` +
-                          `• Індекс 1 Година (1h): ${rsi1h.toFixed(2)} (Низький)\n` +
-                          `• Індекс 5 Годин (5h): ${rsi5h.toFixed(2)} (Низький)\n\n` +
-                          `🤖 <i>ШІ виявив сильну зону перепроданості на обох графіках. Рекомендовано покупку.</i>`;
-
-            } else if (rsi1h > 70 && rsi5h > 65) { 
+                reason = `📈 <b>Підтверджено вихідний тренд!</b>\n` +
+                         `• Ціна пробила ковзні середні вгору.\n` +
+                         `• Об'єми торгів виросли на ${( (currentVolume/avgVolume - 1) * 100 ).toFixed(0)}% (Зайшли гроші).\n` +
+                         `• RSI рівний ${rsi.toFixed(0)} (Є запас для росту).`;
+            } 
+            // SELL: Ціна падає нижче EMA20 і EMA50 + Об'єми на продаж ростуть + RSI падає
+            else if (currentPrice < ema20 && ema20 < ema50 && currentVolume > avgVolume * 1.2 && rsi < 50) {
                 signal = "SELL";
-                message = `🔴 <b>РОЗУМНИЙ СИГНАЛ: SELL (Шорт)</b> 🔴\n\n` +
-                          `<b>Монета:</b> ${coin.name}\n` +
-                          `<b>Поточна ціна:</b> $${currentPrice}\n\n` +
-                          `📊 <b>Аналіз таймфреймів:</b>\n` +
-                          `• Індекс 1 Година (1h): ${rsi1h.toFixed(2)} (Високий)\n` +
-                          `• Індекс 5 Годин (5h): ${rsi5h.toFixed(2)} (Високий)\n\n` +
-                          `🤖 <i>ШІ зафіксував сильний перегрів ринку на обох графіках. Рекомендовано продаж.</i>`;
+                reason = `📉 <b>Підтверджено спадний тренд (Шорт)!</b>\n` +
+                         `• Ціна провалилася під лінію тренду EMA50.\n...`;
             }
 
-            // Якщо є сигнал — надсилаємо його
             if (signal && MY_CHAT_ID) {
-                await bot.telegram.sendMessage(MY_CHAT_ID, message, { parse_mode: 'HTML' });
-                console.log(`[ШІ] Сигнал по ${coin.symbol} надіслано!`);
-            } else {
-                console.log(`[ШІ] ${coin.symbol} в межах норми. (1h: ${rsi1h.toFixed(1)}, 5h: ${rsi5h.toFixed(1)})`);
+                const textMessage = `${signal === 'BUY' ? '🟢' : '🔴'} <b>ПРОФЕСІЙНИЙ СИГНАЛ: ${signal}</b>\n\n` +
+                                    `<b>Актив:</b> ${coin.name}\n` +
+                                    `<b>Ціна входу:</b> $${currentPrice}\n\n` +
+                                    `📊 <b>Обґрунтування ШІ:</b>\n${reason}`;
+                
+                await bot.telegram.sendMessage(MY_CHAT_ID, textMessage, { parse_mode: 'HTML' });
             }
 
         } catch (error) {
-            console.error(`Помилка аналізу для ${coin.symbol}:`, error.message);
+            console.error(`Помилка ШІ для ${coin.symbol}:`, error.message);
         }
     }
 }
 
-// Запит від Cron-Job кожні 5 хвилин
+// Ручна перевірка та запити від Cron-Job
 app.get('/', async (req, res) => {
-    res.send('Мульти-монетний ШІ-аналізатор активний!');
-    await analyzeMarket(); 
+    res.send('Комплексний аналізатор тренду та об\'ємів працює!');
+    await analyzeMarket();
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Розумний сервер сигналів запущено на порті ${PORT}`));
-
-bot.start((ctx) => ctx.reply(`Бот активований. Твій Chat ID: ${ctx.chat.id}`));
+app.listen(PORT, () => console.log(`Професійний сервер запущено`));
 bot.launch();
