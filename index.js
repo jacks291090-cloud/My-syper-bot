@@ -15,37 +15,29 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Команда ручної перевірки ціни
+// Команда ручної перевірки ціни через повністю відкрите API Mempool
 bot.command('price', async (ctx) => {
     try {
-        const res = await axios.get('https://gateio.ws');
-        // Gate.io повертає масив, беремо перший елемент [0]
-        const currentPrice = parseFloat(res.data[0].last).toFixed(2);
-        await ctx.reply(`💰 Поточна ціна BTC/USDT: $${currentPrice}`);
+        const res = await axios.get('https://mempool.space');
+        const currentPrice = parseFloat(res.data.USD).toFixed(2);
+        await ctx.reply(`💰 Поточна ціна BTC/USD: $${currentPrice}`);
     } catch (err) {
         console.error("Помилка команди:", err.message);
         await ctx.reply("❌ Помилка зв'язку з сервером ціни. Спробуйте ще раз.");
     }
 });
 
-// Автоматичні сигнали за таймером
+// Функція автоматичного аналізу та сигналів
 async function sendAutoSignal(timeframeName) {
     try {
-        const res = await axios.get('https://gateio.ws');
-        const marketData = res.data[0]; // Беремо перший елемент масиву
-        
-        const price = parseFloat(marketData.last).toFixed(2);
-        const percent = parseFloat(marketData.change_percentage).toFixed(2);
+        const res = await axios.get('https://mempool.space');
+        const price = parseFloat(res.data.USD).toFixed(2);
 
-        let signalType = "⏳ ОЧІКУВАННЯ (ФЛЕТ)";
+        let signalType = "⏳ ОЧІКУВАННЯ (АНАЛІЗ ТРЕНДУ)";
         let icon = "⚪";
 
-        if (percent > 1.0) { signalType = "📈 ПОКУПКА (BUY)"; icon = "🟢"; }
-        else if (percent < -1.0) { signalType = "📉 ПРОДАЖ (SELL)"; icon = "🔴"; }
-
-        const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USDT | ТФ: ${timeframeName}]**\n\n` +
-                    `💵 **Ціна:** $${price}\n` +
-                    `📊 **Зміна за 24г:** ${percent}%\n\n` +
+        const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USD | ТФ: ${timeframeName}]**\n\n` +
+                    `💵 **Ціна:** $${price}\n\n` +
                     `🤖 **Рішення алгоритму:** ${signalType}`;
 
         await bot.telegram.sendMessage(userId, msg, { parse_mode: "Markdown" });
