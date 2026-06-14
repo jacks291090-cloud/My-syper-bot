@@ -15,11 +15,12 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Команда ручної перевірки ціни через повністю відкрите API Mempool
+// Команда ручної перевірки ціни з точним шляхом до ціни
 bot.command('price', async (ctx) => {
     try {
         const res = await axios.get('https://mempool.space');
-        const currentPrice = parseFloat(res.data.USD).toFixed(2);
+        // ТОЧНИЙ ШЛЯХ: res.data.USD.price замість res.data.USD
+        const currentPrice = parseFloat(res.data.USD.price).toFixed(2);
         await ctx.reply(`💰 Поточна ціна BTC/USD: $${currentPrice}`);
     } catch (err) {
         console.error("Помилка команди:", err.message);
@@ -31,7 +32,8 @@ bot.command('price', async (ctx) => {
 async function sendAutoSignal(timeframeName) {
     try {
         const res = await axios.get('https://mempool.space');
-        const price = parseFloat(res.data.USD).toFixed(2);
+        // ТОЧНИЙ ШЛЯХ: res.data.USD.price замість res.data.USD
+        const price = parseFloat(res.data.USD.price).toFixed(2);
 
         let signalType = "⏳ ОЧІКУВАННЯ (АНАЛІЗ ТРЕНДУ)";
         let icon = "⚪";
