@@ -15,12 +15,12 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Ручна перевірка ціни без складної вкладеності об'єктів
+// Команда ручної перевірки ціни через супер-відкрите API Gate.io
 bot.command('price', async (ctx) => {
     try {
-        const res = await axios.get('https://blockchain.info');
-        const currentPrice = res.data.USD.last;
-        await ctx.reply(`💰 Поточна ціна BTC/USD: $${currentPrice}`);
+        const res = await axios.get('https://gateio.ws');
+        const currentPrice = parseFloat(res.data[0].last).toFixed(2);
+        await ctx.reply(`💰 Поточна ціна BTC/USDT: $${currentPrice}`);
     } catch (err) {
         console.error("Помилка команди:", err.message);
         await ctx.reply("❌ Помилка зв'язку з сервером ціни. Спробуйте ще раз.");
@@ -30,16 +30,19 @@ bot.command('price', async (ctx) => {
 // Автоматичні сигнали за таймером
 async function sendAutoSignal(timeframeName) {
     try {
-        const res = await axios.get('https://blockchain.info');
-        const price = res.data.USD.last;
+        const res = await axios.get('https://gateio.ws');
+        const price = parseFloat(res.data[0].last).toFixed(2);
+        const percent = parseFloat(res.data[0].change_percentage).toFixed(2);
 
-        // Оскільки текстове API показує лише поточну ціну, 
-        // ШІ робить висновок на основі базового моніторингу ринку
-        let signalType = "⏳ ОЧІКУВАННЯ (АНАЛІЗ ТРЕНДУ)";
+        let signalType = "⏳ ОЧІКУВАННЯ (ФЛЕТ)";
         let icon = "⚪";
 
-        const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USD | ТФ: ${timeframeName}]**\n\n` +
-                    `💵 **Ціна:** $${price}\n\n` +
+        if (percent > 1.0) { signalType = "📈 ПОКУПКА (BUY)"; icon = "🟢"; }
+        else if (percent < -1.0) { signalType = "📉 ПРОДАЖ (SELL)"; icon = "🔴"; }
+
+        const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USDT | ТФ: ${timeframeName}]**\n\n` +
+                    `💵 **Ціна:** $${price}\n` +
+                    `📊 **Зміна за 24г:** ${percent}%\n\n` +
                     `🤖 **Рішення алгоритму:** ${signalType}`;
 
         await bot.telegram.sendMessage(userId, msg, { parse_mode: "Markdown" });
