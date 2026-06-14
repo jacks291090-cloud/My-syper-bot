@@ -15,10 +15,11 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Команда ручної перевірки ціни через супер-відкрите API Gate.io
+// Команда ручної перевірки ціни
 bot.command('price', async (ctx) => {
     try {
         const res = await axios.get('https://gateio.ws');
+        // Gate.io повертає масив, беремо перший елемент [0]
         const currentPrice = parseFloat(res.data[0].last).toFixed(2);
         await ctx.reply(`💰 Поточна ціна BTC/USDT: $${currentPrice}`);
     } catch (err) {
@@ -31,8 +32,10 @@ bot.command('price', async (ctx) => {
 async function sendAutoSignal(timeframeName) {
     try {
         const res = await axios.get('https://gateio.ws');
-        const price = parseFloat(res.data[0].last).toFixed(2);
-        const percent = parseFloat(res.data[0].change_percentage).toFixed(2);
+        const marketData = res.data[0]; // Беремо перший елемент масиву
+        
+        const price = parseFloat(marketData.last).toFixed(2);
+        const percent = parseFloat(marketData.change_percentage).toFixed(2);
 
         let signalType = "⏳ ОЧІКУВАННЯ (ФЛЕТ)";
         let icon = "⚪";
