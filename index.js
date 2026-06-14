@@ -15,53 +15,43 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Ручна перевірка ціни через найнадійніший резервний канал
+// Проста і залізобетонна команда ціни з надійного джерела
 bot.command('price', async (ctx) => {
     try {
-        const res = await axios.get('https://binance.com');
-        const currentPrice = parseFloat(res.data.price).toFixed(2);
-        await ctx.reply(`💰 Поточна ціна BTC/USDT: $${currentPrice}`);
-    } catch (err) {
-        try {
-            // Друге незалежне джерело, якщо Binance знову заблокує IP
-            const res2 = await axios.get('https://tonapi.io');
-            const currentPrice2 = parseFloat(res2.data.rates.btc.prices.USD).toFixed(2);
-            await ctx.reply(`💰 Поточна ціна BTC/USD (Резерв): $${currentPrice2}`);
-        } catch (err2) {
-            console.error("Обидва канали заблоковано:", err2.message);
-            await ctx.reply("❌ Помилка зв'язку з серверами ціни. Всі канали заблоковано хмарою хостингу.");
+        const res = await axios.get('https://blockchain.info');
+        // Повертає просто чисте число (наприклад, 67450.21) без жодних об'єктів та літер
+        const currentPrice = parseFloat(res.data).toFixed(2);
+        
+        if (isNaN(currentPrice)) {
+            throw new Error("Отримано не числове значення");
         }
+        
+        await ctx.reply(`💰 Поточна ціна BTC/USD: $${currentPrice}`);
+    } catch (err) {
+        console.error("Помилка команди:", err.message);
+        await ctx.reply("❌ Сервер ціни тимчасово перевантажений. Спробуйте ще раз за хвилину.");
     }
 });
 
 // Автоматичні сигнали за таймером
 async function sendAutoSignal(timeframeName) {
     try {
-        const res = await axios.get('https://binance.com');
-        const price = parseFloat(res.data.price).toFixed(2);
+        const res = await axios.get('https://blockchain.info');
+        const price = parseFloat(res.data).toFixed(2);
+
+        if (isNaN(price)) return;
 
         let signalType = "⏳ ОЧІКУВАННЯ (АНАЛІЗ ТРЕНДУ)";
         let icon = "⚪";
 
-        const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USDT | ТФ: ${timeframeName}]**\n\n` +
+        const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USD | ТФ: ${timeframeName}]**\n\n` +
                     `💵 **Ціна:** $${price}\n\n` +
                     `🤖 **Рішення алгоритму:** ${signalType}`;
 
         await bot.telegram.sendMessage(userId, msg, { parse_mode: "Markdown" });
         console.log(`[${timeframeName}] Сигнал успішно надіслано.`);
     } catch (err) {
-        try {
-            const res2 = await axios.get('https://tonapi.io');
-            const price2 = parseFloat(res2.data.rates.btc.prices.USD).toFixed(2);
-            
-            const msg2 = `⚪ **[АВТО-СИГНАЛ: BTC/USD | ТФ: ${timeframeName}]**\n\n` +
-                        `💵 **Ціна (Резерв):** $${price2}\n\n` +
-                        `🤖 **Рішення алгоритму:** ⏳ ОЧІКУВАННЯ`;
-                        
-            await bot.telegram.sendMessage(userId, msg2, { parse_mode: "Markdown" });
-        } catch (err2) {
-            console.error(`Помилка обох таймерів ${timeframeName}:`, err2.message);
-        }
+        console.error(`Помилка таймера ${timeframeName}:`, err.message);
     }
 }
 
