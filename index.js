@@ -15,12 +15,11 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Команда ручної перевірки ціни з точним шляхом до ціни
+// Ручна перевірка ціни через найнадійніше API TON/Stonfi
 bot.command('price', async (ctx) => {
     try {
-        const res = await axios.get('https://mempool.space');
-        // ТОЧНИЙ ШЛЯХ: res.data.USD.price замість res.data.USD
-        const currentPrice = parseFloat(res.data.USD.price).toFixed(2);
+        const res = await axios.get('https://tonapi.io');
+        const currentPrice = parseFloat(res.data.rates.BTC.prices.USD).toFixed(2);
         await ctx.reply(`💰 Поточна ціна BTC/USD: $${currentPrice}`);
     } catch (err) {
         console.error("Помилка команди:", err.message);
@@ -28,12 +27,11 @@ bot.command('price', async (ctx) => {
     }
 });
 
-// Функція автоматичного аналізу та сигналів
+// Автоматичні сигнали за таймером
 async function sendAutoSignal(timeframeName) {
     try {
-        const res = await axios.get('https://mempool.space');
-        // ТОЧНИЙ ШЛЯХ: res.data.USD.price замість res.data.USD
-        const price = parseFloat(res.data.USD.price).toFixed(2);
+        const res = await axios.get('https://tonapi.io');
+        const price = parseFloat(res.data.rates.BTC.prices.USD).toFixed(2);
 
         let signalType = "⏳ ОЧІКУВАННЯ (АНАЛІЗ ТРЕНДУ)";
         let icon = "⚪";
