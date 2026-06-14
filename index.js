@@ -6,37 +6,36 @@ const botToken = process.env.TELEGRAM_TOKEN;
 const userId = "1994869835"; 
 
 if (!botToken) {
-    console.error("Помилка: Додайте TELEGRAM_TOKEN в Environment на Render!");
+    console.error("Помилка: Токен не знайдено!");
     process.exit(1);
 }
 
 const bot = new Telegraf(botToken);
 
-// Головна команда привіту
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Нова стабільна команда для перевірки ціни
+// Виправлена команда отримання ціни
 bot.command('price', async (ctx) => {
     try {
-        // Використовуємо стабільне API, яке не блокує хостинги
-        const res = await axios.get('https://cryptocompare.com');
-        const currentPrice = parseFloat(res.data.USDT).toFixed(2);
+        // Використовуємо стабільне та просте API від CoinGecko
+        const res = await axios.get('https://coingecko.com');
+        const currentPrice = res.data.bitcoin.usd;
         await ctx.reply(`💰 Поточна ціна BTC/USDT: $${currentPrice}`);
     } catch (err) {
         console.error("Помилка ручної команди:", err.message);
-        await ctx.reply("❌ Помилка зв'язку з сервером ціни. Перевіряю резервні канали...");
+        await ctx.reply("❌ Помилка зв'язку з сервером ціни. Спробуйте ще раз.");
     }
 });
 
-// Функція для автоматичних сигналів за таймером
+// Виправлена функція для автоматичних сигналів за таймером
 async function sendAutoSignal(timeframeName) {
     try {
-        // Запитуємо ціну та зміну за 24 години
-        const res = await axios.get('https://cryptocompare.com');
-        const data = res.data.RAW.BTC.USDT;
+        // Отримуємо ціну та зміну за 24 години
+        const res = await axios.get('https://coingecko.com');
+        const data = res.data[0];
         
-        const price = parseFloat(data.PRICE).toFixed(2);
-        const percent = parseFloat(data.CHANGEPCT24HOUR).toFixed(2);
+        const price = data.current_price;
+        const percent = parseFloat(data.price_change_percentage_24h).toFixed(2);
 
         let signalType = "⏳ ОЧІКУВАННЯ (ФЛЕТ)";
         let icon = "⚪";
@@ -51,11 +50,11 @@ async function sendAutoSignal(timeframeName) {
 
         const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USDT | ТФ: ${timeframeName}]**\n\n` +
                     `💵 **Ціна:** $${price}\n` +
-                    `📊 **Зміна за 24г:** ${percent}%\n\n` +
+                    `📊 **Змена за 24г:** ${percent}%\n\n` +
                     `🤖 **Рішення:** ${signalType}`;
 
         await bot.telegram.sendMessage(userId, msg, { parse_mode: "Markdown" });
-        console.log(`[${timeframeName}] Сигнал успішно відправлено на ID ${userId}`);
+        console.log(`[${timeframeName}] Сигнал успішно відправлено.`);
     } catch (err) {
         console.error(`Помилка таймера ${timeframeName}:`, err.message);
     }
@@ -67,7 +66,7 @@ cron.schedule('0 * * * *', () => sendAutoSignal("1 година"));
 cron.schedule('0 */5 * * *', () => sendAutoSignal("5 годин"));
 
 bot.launch()
-    .then(() => console.log("🚀 Бот запущений з надійним API!"))
+    .then(() => console.log("🚀 Бот запущений з надійним CoinGecko API!"))
     .catch((err) => console.error("Помилка запуску:", err));
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
