@@ -1,5 +1,4 @@
-{
-  "name": "crypto-bot",
+name": "crypto-bot",
   "version": "1.0.0",
   "description": "Crypto AI Bot",
   "main": "index.js",
