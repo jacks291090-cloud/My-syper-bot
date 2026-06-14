@@ -15,11 +15,11 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
-// Команда ручної перевірки ціни
+// Команда ручної перевірки ціни через стабільне API KuCoin
 bot.command('price', async (ctx) => {
     try {
-        const res = await axios.get('https://coingecko.com');
-        const currentPrice = res.data.bitcoin.usd;
+        const res = await axios.get('https://kucoin.com');
+        const currentPrice = parseFloat(res.data.data.price).toFixed(2);
         await ctx.reply(`💰 Поточна ціна BTC/USDT: $${currentPrice}`);
     } catch (err) {
         console.error("Помилка команди:", err.message);
@@ -27,14 +27,16 @@ bot.command('price', async (ctx) => {
     }
 });
 
-// Функція автоматичного аналізу та сигналів
+// Функція автоматичного аналізу та сигналів через KuCoin API
 async function sendAutoSignal(timeframeName) {
     try {
-        const res = await axios.get('https://coingecko.com');
-        const cryptoData = res.data[0]; // Виправлено: беремо перший елемент масиву
+        // Отримуємо статистику за 24 години з KuCoin
+        const res = await axios.get('https://kucoin.com');
+        const marketData = res.data.data;
         
-        const price = cryptoData.current_price;
-        const percent = parseFloat(cryptoData.price_change_percentage_24h).toFixed(2);
+        const price = parseFloat(marketData.last).toFixed(2);
+        const changeRate = parseFloat(marketData.changeRate); // Відсоткова зміна в десятковому форматі (наприклад 0.02 = 2%)
+        const percent = (changeRate * 100).toFixed(2);
 
         let signalType = "⏳ ОЧІКУВАННЯ (ФЛЕТ)";
         let icon = "⚪";
