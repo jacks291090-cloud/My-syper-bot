@@ -1,7 +1,7 @@
 const { Telegraf } = require('telegraf');
 const cron = require('node-cron');
 const axios = require('axios');
-const http = require('http'); // Додаємо стандартний веб-сервер Node.js
+const http = require('http');
 
 const botToken = process.env.TELEGRAM_TOKEN;
 const userId = "1994869835"; 
@@ -15,6 +15,7 @@ const bot = new Telegraf(botToken);
 
 bot.start((ctx) => ctx.reply('🤖 Бот активований! Авто-сигнали на 3хв, 1г та 5г запущені. Напиши /price для перевірки курсу.'));
 
+// Команда ручної перевірки ціни
 bot.command('price', async (ctx) => {
     try {
         const res = await axios.get('https://coingecko.com');
@@ -26,13 +27,14 @@ bot.command('price', async (ctx) => {
     }
 });
 
+// Функція автоматичного аналізу та сигналів
 async function sendAutoSignal(timeframeName) {
     try {
         const res = await axios.get('https://coingecko.com');
-        const data = res.data[0]; // Виправлено отримання масиву від CoinGecko
+        const cryptoData = res.data[0]; // Виправлено: беремо перший елемент масиву
         
-        const price = data.current_price;
-        const percent = parseFloat(data.price_change_percentage_24h).toFixed(2);
+        const price = cryptoData.current_price;
+        const percent = parseFloat(cryptoData.price_change_percentage_24h).toFixed(2);
 
         let signalType = "⏳ ОЧІКУВАННЯ (ФЛЕТ)";
         let icon = "⚪";
@@ -43,7 +45,7 @@ async function sendAutoSignal(timeframeName) {
         const msg = `${icon} **[АВТО-СИГНАЛ: BTC/USDT | ТФ: ${timeframeName}]**\n\n` +
                     `💵 **Ціна:** $${price}\n` +
                     `📊 **Зміна за 24г:** ${percent}%\n\n` +
-                    `🤖 **Рішення:** ${signalType}`;
+                    `🤖 **Рішення алгоритму:** ${signalType}`;
 
         await bot.telegram.sendMessage(userId, msg, { parse_mode: "Markdown" });
         console.log(`[${timeframeName}] Сигнал успішно надіслано.`);
@@ -52,11 +54,12 @@ async function sendAutoSignal(timeframeName) {
     }
 }
 
+// Таймери
 cron.schedule('*/3 * * * *', () => sendAutoSignal("3 хвилини"));
 cron.schedule('0 * * * *', () => sendAutoSignal("1 година"));
 cron.schedule('0 */5 * * *', () => sendAutoSignal("5 годин"));
 
-// ЗАГЛУШКА ДЛЯ РЕНДЕРА (відкриваємо порт, щоб Render не вимикав бота)
+// Веб-сервер для проходження перевірки Render
 const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -67,7 +70,7 @@ server.listen(PORT, () => {
 });
 
 bot.launch()
-    .then(() => console.log("🚀 Бот успішно запущений!"))
+    .then(() => console.log("🚀 Бот успішно запущений і слухає сервер Telegram!"))
     .catch((err) => console.error("Помилка запуску:", err));
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
